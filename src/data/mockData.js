@@ -1,0 +1,16 @@
+export const mockMembers=[
+{id:'1',fullName:'Trần Văn Phúc',gender:'male',generation:1,birthDate:'1918-03-12',deathDate:'1998-08-21',isAlive:false,bio:'Thủy tổ của nhánh gia đình, quê Nam Định.',burialPlace:'Nghĩa trang quê nhà',branch:'Chi trưởng'},
+{id:'2',fullName:'Nguyễn Thị Lan',gender:'female',generation:1,birthDate:'1922-05-02',deathDate:'2005-09-17',isAlive:false,spouseId:'1',branch:'Chi trưởng'},
+{id:'3',fullName:'Trần Văn Minh',gender:'male',generation:2,birthDate:'1945-01-12',isAlive:true,parentId:'1',spouseId:'5',orderInFamily:1,branch:'Chi trưởng'},
+{id:'4',fullName:'Trần Văn Hòa',gender:'male',generation:2,birthDate:'1949-11-10',isAlive:true,parentId:'1',spouseId:'6',orderInFamily:2,branch:'Chi thứ'},
+{id:'5',fullName:'Lê Thị Mai',gender:'female',generation:2,birthDate:'1947-04-18',isAlive:true,spouseId:'3',branch:'Chi trưởng'},
+{id:'6',fullName:'Phạm Thị Hoa',gender:'female',generation:2,birthDate:'1951-07-06',isAlive:true,spouseId:'4',branch:'Chi thứ'},
+{id:'7',fullName:'Trần Quốc Anh',gender:'male',generation:3,birthDate:'1972-06-15',isAlive:true,parentId:'3',spouseId:'10',orderInFamily:1,branch:'Chi trưởng'},
+{id:'8',fullName:'Trần Thị Hương',gender:'female',generation:3,birthDate:'1976-02-11',isAlive:true,parentId:'3',orderInFamily:2,branch:'Chi trưởng'},
+{id:'9',fullName:'Trần Văn Bình',gender:'male',generation:3,birthDate:'1978-09-24',isAlive:true,parentId:'4',spouseId:'11',orderInFamily:1,branch:'Chi thứ'},
+{id:'10',fullName:'Đỗ Thị Thu',gender:'female',generation:3,birthDate:'1975-03-08',isAlive:true,spouseId:'7',branch:'Chi trưởng'},
+{id:'11',fullName:'Vũ Thị Ngọc',gender:'female',generation:3,birthDate:'1980-12-04',isAlive:true,spouseId:'9',branch:'Chi thứ'},
+{id:'12',fullName:'Trần Minh Khang',gender:'male',generation:4,birthDate:'2001-10-22',isAlive:true,parentId:'7',orderInFamily:1,branch:'Chi trưởng'},
+{id:'13',fullName:'Trần Ngọc Hà',gender:'female',generation:4,birthDate:'2004-07-12',isAlive:true,parentId:'7',orderInFamily:2,branch:'Chi trưởng'},
+{id:'14',fullName:'Trần Gia Bảo',gender:'male',generation:4,birthDate:'2007-01-29',isAlive:true,parentId:'9',orderInFamily:1,branch:'Chi thứ'},
+{id:'15',fullName:'Trần Khánh Linh',gender:'female',generation:4,birthDate:'2010-05-16',isAlive:true,parentId:'9',orderInFamily:2,branch:'Chi thứ'}];

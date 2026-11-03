@@ -1,0 +1,1 @@
+@tailwind base;@tailwind components;@tailwind utilities;body{font-family:ui-sans-serif,system-ui,'Segoe UI',sans-serif;background:#f8f6f1;color:#292d2a}.react-flow__node{cursor:pointer}.react-flow__attribution{display:none}input,select,textarea{outline-color:#a68a60}

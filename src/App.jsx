@@ -1,50 +1,648 @@
-import React,{useEffect,useMemo,useState} from 'react';
-import {BrowserRouter,Link,NavLink,Navigate,Route,Routes,useNavigate,useParams} from 'react-router-dom';
-import {ReactFlowProvider} from '@xyflow/react';
-import {GitBranch,Users,Shield,LogIn,LogOut,Plus,Search,Download,Upload,Menu} from 'lucide-react';
+import React, {
+	useEffect,
+	useMemo,
+	useState
+} from 'react';
+import {
+	BrowserRouter,
+	Link,
+	NavLink,
+	Navigate,
+	Route,
+	Routes,
+	useNavigate,
+	useParams
+} from 'react-router-dom';
+import {
+	ReactFlowProvider
+} from '@xyflow/react';
+import {
+	GitBranch,
+	Users,
+	Shield,
+	LogIn,
+	LogOut,
+	Plus,
+	Search,
+	Download,
+	Upload,
+	Menu
+} from 'lucide-react';
 import FamilyTreeCanvas from './components/FamilyTreeCanvas';
 import MemberDrawer from './components/MemberDrawer';
-import {mockMembers} from './data/mockData';
-import {supabase,configured} from './lib/supabase';
-const blank={fullName:'',gender:'male',generation:1,birthDate:'',deathDate:'',deathCalendar:'solar',isAlive:true,avatarUrl:'',parentId:'',spouseId:'',orderInFamily:'',bio:'',burialPlace:'',branchId:'',isPublic:false};
-const labels={super_admin:'Super Admin',branch_admin:'Quản trị chi họ',member:'Thành viên'};
-const btn='rounded-xl bg-amber-900 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50';
-const input='w-full rounded-xl border border-stone-300 bg-white px-3 py-2 outline-none focus:border-amber-700';
-const toUi=(r,branches)=>({id:r.id,fullName:r.full_name,gender:r.gender,generation:r.generation,birthDate:r.birth_date||'',deathDate:r.death_date||'',deathCalendar:r.death_calendar,isAlive:r.is_alive,avatarUrl:r.avatar_url||'',parentId:r.parent_id||'',spouseId:r.spouse_id||'',orderInFamily:r.order_in_family||'',bio:r.bio||'',burialPlace:r.burial_place||'',branchId:r.branch_id,branch:branches.find(b=>b.id===r.branch_id)?.name||'',isPublic:r.is_public});
-const toDb=m=>({full_name:m.fullName.trim(),gender:m.gender,generation:Number(m.generation),birth_date:m.birthDate||null,death_date:m.isAlive?null:m.deathDate||null,death_calendar:m.deathCalendar,is_alive:m.isAlive,avatar_url:m.avatarUrl||null,parent_id:m.parentId||null,spouse_id:m.spouseId||null,order_in_family:m.orderInFamily?Number(m.orderInFamily):null,bio:m.bio||null,burial_place:m.burialPlace||null,branch_id:m.branchId,is_public:m.isPublic});
-function Shell(){
- const [session,setSession]=useState(null),[profile,setProfile]=useState(null),[members,setMembers]=useState([]),[branches,setBranches]=useState([]),[profiles,setProfiles]=useState([]),[loading,setLoading]=useState(configured),[error,setError]=useState('');
- const navigate=useNavigate();
- async function refreshProfile(user){if(!user){setProfile(null);return;}const {data,error}=await supabase.from('profiles').select('*').eq('user_id',user.id).single();if(error)setError(error.message);setProfile(data||null);}
- async function refresh(){if(!configured)return;const [bs,ms]=await Promise.all([supabase.from('branches').select('*').order('name'),supabase.from('members').select('*').order('generation')]);if(bs.error||ms.error)setError(bs.error?.message||ms.error?.message);setBranches(bs.data||[]);setMembers((ms.data||[]).map(m=>toUi(m,bs.data||[])));}
- async function refreshUsers(){if(!configured||profile?.role!=='super_admin')return;const {data,error}=await supabase.from('profiles').select('*').order('created_at');if(error)setError(error.message);setProfiles(data||[]);}
- useEffect(()=>{if(!configured)return;let active=true;supabase.auth.getSession().then(async({data})=>{if(!active)return;setSession(data.session);await refreshProfile(data.session?.user);await refresh();if(active)setLoading(false);});const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>{if(!active)return;setSession(s);setTimeout(()=>{if(active){refreshProfile(s?.user);refresh();}},0);});return()=>{active=false;subscription.unsubscribe();};},[]);
- useEffect(()=>{if(profile?.role==='super_admin')refreshUsers();},[profile?.role]);
- const canEdit=profile?.role==='super_admin'||profile?.role==='branch_admin';
- const canEditMember=m=>profile?.role==='super_admin'||(profile?.role==='branch_admin'&&m.branchId===profile.branch_id);
- const canCreateIn=id=>profile?.role==='super_admin'||(profile?.role==='branch_admin'&&id===profile.branch_id);
- async function saveMember(form,id){setError('');if(!canCreateIn(form.branchId)||id&&!canEditMember(members.find(m=>m.id===id)||{}))throw Error('Không có quyền sửa chi họ này');if(!form.fullName.trim())throw Error('Vui lòng nhập họ tên');if(form.parentId===id||form.spouseId===id)throw Error('Không thể liên kết với chính mình');if(form.parentId&&members.find(m=>m.id===form.parentId)?.generation!==Number(form.generation)-1)throw Error('Đời của con phải lớn hơn cha/mẹ đúng một đời');if(form.spouseId&&members.find(m=>m.id===form.spouseId)?.generation!==Number(form.generation))throw Error('Vợ/chồng phải cùng đời');const q=id?supabase.from('members').update(toDb(form)).eq('id',id):supabase.from('members').insert(toDb(form));const {error}=await q;if(error)throw Error(error.message);await refresh();}
- async function deleteMember(m){if(!canEditMember(m))throw Error('Không có quyền');if(members.some(x=>x.parentId===m.id))throw Error('Thành viên có con, cần chuyển quan hệ trước khi xóa');if(!window.confirm(`Xóa ${m.fullName}?`))return;const {error}=await supabase.from('members').delete().eq('id',m.id);if(error)throw Error(error.message);await refresh();}
- async function updateProfile(userId,changes){const {error}=await supabase.from('profiles').update(changes).eq('user_id',userId);if(error)throw Error(error.message);await refreshUsers();}
- async function addBranch(name){const {error}=await supabase.from('branches').insert({name:name.trim()});if(error)throw Error(error.message);await refresh();}
- if(!configured)return <div className="mx-auto mt-20 max-w-xl rounded-2xl border bg-white p-8"><h1 className="text-2xl font-bold">Gia Phả Việt · Cấu hình Supabase</h1><p className="mt-4">Tạo file <code>.env</code> từ <code>.env.example</code>, điền URL và publishable/anon key của Supabase, sau đó chạy lại <code>npm run dev</code>.</p><p className="mt-4 text-stone-500">Xem README.md để tạo bảng, phân quyền và khởi tạo Super Admin.</p></div>;
- if(loading)return <p className="p-10 text-center">Đang tải dữ liệu...</p>;
- return <div className="min-h-screen bg-[#faf8f3] text-stone-800"><header className="border-b bg-white"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4"><Link to="/" className="flex items-center gap-2 font-bold text-xl text-amber-950"><GitBranch/> GIA PHẢ VIỆT</Link><nav className="flex flex-wrap items-center gap-3 text-sm"><NavLink to="/" className="hover:underline">Cây gia phả</NavLink>{canEdit&&<NavLink to="/admin" className="hover:underline">Quản trị</NavLink>}{profile?.role==='super_admin'&&<NavLink to="/admin/accounts" className="hover:underline">Tài khoản</NavLink>}{session?<><span className="hidden text-stone-500 sm:inline">{profile?.display_name||session.user.email} · {labels[profile?.role]||'Thành viên'}</span><button className="flex items-center gap-1" onClick={async()=>{await supabase.auth.signOut();navigate('/');}}><LogOut size={16}/> Đăng xuất</button></>:<Link to="/login" className="flex items-center gap-1"><LogIn size={16}/> Đăng nhập</Link>}</nav></div></header>
- {error&&<div className="mx-auto mt-3 max-w-7xl rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}<button className="ml-3 underline" onClick={()=>setError('')}>Đóng</button></div>}
- <main className="mx-auto max-w-7xl p-4 md:p-6"><Routes>
- <Route path="/" element={<Tree members={members} session={session} canEdit={canEdit} onEdit={m=>navigate('/admin/members/'+m.id)} />}/>
- <Route path="/login" element={session?<Navigate to="/"/>:<Login/>}/>
- <Route path="/admin" element={canEdit?<Dashboard members={members} branches={branches} profile={profile} canEditMember={canEditMember} onDelete={deleteMember} onAddBranch={addBranch} onRefresh={refresh}/>:<Navigate to="/login"/>}/>
- <Route path="/admin/members/new" element={canEdit?<Editor members={members} branches={branches} profile={profile} onSave={saveMember}/>:<Navigate to="/login"/>}/>
- <Route path="/admin/members/:id" element={canEdit?<Editor members={members} branches={branches} profile={profile} onSave={saveMember}/>:<Navigate to="/login"/>}/>
- <Route path="/admin/accounts" element={profile?.role==='super_admin'?<Accounts profiles={profiles} branches={branches} onUpdate={updateProfile}/>:<Navigate to="/"/>}/>
- <Route path="*" element={<Navigate to="/"/>}/>
- </Routes></main></div>;
-}
-function Login(){const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[name,setName]=useState(''),[register,setRegister]=useState(false),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);const navigate=useNavigate();async function submit(e){e.preventDefault();setBusy(true);setMessage('');const result=register?await supabase.auth.signUp({email,password,options:{data:{full_name:name}}}):await supabase.auth.signInWithPassword({email,password});setBusy(false);if(result.error)setMessage(result.error.message);else if(register)setMessage('Đã gửi yêu cầu đăng ký. Kiểm tra email xác nhận (nếu được bật), sau đó đăng nhập.');else navigate('/');}return <div className="mx-auto mt-10 max-w-md rounded-2xl border bg-white p-7 shadow-sm"><h1 className="mb-5 text-2xl font-bold">{register?'Đăng ký tài khoản':'Đăng nhập Gia Phả Việt'}</h1><form onSubmit={submit} className="space-y-4">{register&&<label className="block text-sm">Họ tên<input className={input} value={name} onChange={e=>setName(e.target.value)} required/></label>}<label className="block text-sm">Email<input className={input} type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label className="block text-sm">Mật khẩu<input className={input} type="password" minLength={6} value={password} onChange={e=>setPassword(e.target.value)} required/></label><button className={btn+' w-full'} disabled={busy}>{busy?'Đang xử lý...':register?'Đăng ký':'Đăng nhập'}</button></form>{message&&<p className="mt-3 text-sm text-amber-900">{message}</p>}<button className="mt-5 text-sm text-amber-900 underline" onClick={()=>{setRegister(!register);setMessage('');}}>{register?'Đã có tài khoản? Đăng nhập':'Chưa có tài khoản? Đăng ký'}</button><p className="mt-3 text-xs text-stone-500">Tài khoản mới mặc định là thành viên; Super Admin cấp quyền quản trị.</p></div>}
-function Tree({members,session,canEdit,onEdit}){const [selected,setSelected]=useState(''),[query,setQuery]=useState(''),[status,setStatus]=useState('all'),[branch,setBranch]=useState('all'),[view,setView]=useState('tree'),[focus,setFocus]=useState(''),[collapsed,setCollapsed]=useState([]);const branches=[...new Set(members.map(m=>m.branch).filter(Boolean))];const filtered=members.filter(m=>(m.fullName+' '+m.branch+' đời thứ '+m.generation).toLowerCase().includes(query.toLowerCase())&&(status==='all'||(status==='alive')===m.isAlive)&&(branch==='all'||branch===m.branch));const person=members.find(m=>m.id===selected);function exportJson(){const blob=new Blob([JSON.stringify(members,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='gia-pha-viet-backup.json';a.click();URL.revokeObjectURL(url);}return <><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-3xl font-bold text-amber-950">Cây gia phả dòng họ</h1><p className="mt-1 text-stone-500">{members.length} thành viên · {new Set(members.map(m=>m.generation)).size} thế hệ</p></div><button onClick={exportJson} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2"><Download size={16}/> Xuất JSON</button></div><div className="mb-4 grid gap-3 sm:grid-cols-4"><input className={input+' sm:col-span-2'} placeholder="Tìm tên, chi họ, đời thứ..." value={query} onChange={e=>{setQuery(e.target.value);const match=members.find(m=>m.fullName.toLowerCase().includes(e.target.value.toLowerCase()));setFocus(e.target.value?match?.id||'':'' );}}/><select className={input} value={branch} onChange={e=>setBranch(e.target.value)}><option value="all">Tất cả chi họ</option>{branches.map(b=><option key={b}>{b}</option>)}</select><select className={input} value={status} onChange={e=>setStatus(e.target.value)}><option value="all">Tất cả</option><option value="alive">Còn sống</option><option value="deceased">Đã mất</option></select></div><div className="mb-3 flex gap-2"><button className={view==='tree'?btn:'rounded-xl border bg-white px-4 py-2'} onClick={()=>setView('tree')}>Sơ đồ</button><button className={view==='list'?btn:'rounded-xl border bg-white px-4 py-2'} onClick={()=>setView('list')}>Danh sách</button></div>{view==='tree'?<ReactFlowProvider><FamilyTreeCanvas members={filtered} onSelect={setSelected} focusId={focus} collapsed={collapsed}/></ReactFlowProvider>:<div className="grid gap-2 md:grid-cols-2">{filtered.map(m=><button key={m.id} onClick={()=>setSelected(m.id)} className="rounded-xl border bg-white p-4 text-left hover:border-amber-700"><b>{m.fullName}</b><p className="text-sm text-stone-500">Đời thứ {m.generation} · {m.branch} · {m.isAlive?'Còn sống':'Đã mất'}</p></button>)}</div>}{filtered.length===0&&<p className="mt-4">Không tìm thấy thành viên phù hợp.</p>}{person&&<MemberDrawer member={person} members={members} onClose={()=>setSelected('')} onEdit={onEdit} onAdd={()=>{}} onToggle={id=>setCollapsed(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])} collapsed={collapsed} admin={canEdit}/>}</>}
-function Dashboard({members,branches,profile,canEditMember,onDelete,onAddBranch,onRefresh}){const [branchName,setBranchName]=useState(''),[message,setMessage]=useState('');const navigate=useNavigate();const editable=members.filter(canEditMember);async function remove(m){try{await onDelete(m);setMessage('Đã xử lý yêu cầu.')}catch(e){setMessage(e.message)}}async function createBranch(e){e.preventDefault();try{await onAddBranch(branchName);setBranchName('');setMessage('Đã tạo chi họ')}catch(e){setMessage(e.message)}}async function importJson(e){const f=e.target.files?.[0];e.target.value='';if(!f)return;try{const rows=JSON.parse(await f.text());if(!Array.isArray(rows)||rows.length>500)throw Error('JSON phải là mảng tối đa 500 thành viên');setMessage('Tệp hợp lệ. Để tránh ghi đè quan hệ và vượt quyền, hãy nhập từng thành viên tại trang quản trị. Tính năng nhập hàng loạt chưa bật.')}catch(err){setMessage(err.message)}}return <><div className="mb-5 flex flex-wrap justify-between gap-3"><div><h1 className="text-3xl font-bold">Bảng điều khiển</h1><p className="text-stone-500">{labels[profile.role]} · {editable.length} hồ sơ được phép quản lý</p></div><Link className={btn+' flex items-center gap-2'} to="/admin/members/new"><Plus size={16}/> Thêm thành viên</Link></div>{message&&<p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm">{message}</p>}<div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3">{[['Thành viên',members.length],['Chi họ',branches.length],['Đời',new Set(members.map(m=>m.generation)).size]].map(([k,v])=><div key={k} className="rounded-xl border bg-white p-5"><p className="text-sm text-stone-500">{k}</p><b className="text-3xl">{v}</b></div>)}</div>{profile.role==='super_admin'&&<form onSubmit={createBranch} className="mb-5 flex max-w-lg gap-2"><input className={input} placeholder="Tên chi họ mới" value={branchName} onChange={e=>setBranchName(e.target.value)} required/><button className={btn}>Tạo chi</button></form>}<div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full text-left text-sm"><thead className="bg-stone-100"><tr><th className="p-3">Thành viên</th><th className="p-3">Đời</th><th className="p-3">Chi họ</th><th className="p-3">Công khai</th><th className="p-3">Thao tác</th></tr></thead><tbody>{members.map(m=><tr key={m.id} className="border-t"><td className="p-3 font-medium">{m.fullName}</td><td className="p-3">{m.generation}</td><td className="p-3">{m.branch}</td><td className="p-3">{m.isPublic?'Có':'Không'}</td><td className="p-3">{canEditMember(m)?<><button onClick={()=>navigate('/admin/members/'+m.id)} className="mr-3 text-amber-900 underline">Sửa</button><button onClick={()=>remove(m)} className="text-red-700 underline">Xóa</button></>:'Chỉ xem'}</td></tr>)}</tbody></table></div><p className="mt-3 text-xs text-stone-500">Xuất JSON tại trang cây gia phả. Nhập hàng loạt cần quy trình xác thực dữ liệu và quan hệ trước khi bật trên máy chủ.</p></>}
-function Editor({members,branches,profile,onSave}){const {id}=useParams();const current=members.find(m=>m.id===id);const navigate=useNavigate();const [form,setForm]=useState(()=>current?{...blank,...current}:{...blank,branchId:profile.role==='branch_admin'?profile.branch_id:branches[0]?.id||''});const [error,setError]=useState(''),[busy,setBusy]=useState(false);useEffect(()=>{setForm(current?{...blank,...current}:{...blank,branchId:profile.role==='branch_admin'?profile.branch_id:branches[0]?.id||''});},[id,current?.id,branches.length]);const change=(k,v)=>setForm(f=>({...f,[k]:v}));const editableBranches=profile.role==='super_admin'?branches:branches.filter(b=>b.id===profile.branch_id);if(id&&!current)return <p>Không tìm thấy hồ sơ hoặc bạn không có quyền truy cập.</p>;if(current&&profile.role!=='super_admin'&&current.branchId!==profile.branch_id)return <Navigate to="/admin"/>;async function submit(e){e.preventDefault();setBusy(true);setError('');try{await onSave(form,id);navigate('/admin')}catch(err){setError(err.message)}finally{setBusy(false)}}return <div className="mx-auto max-w-3xl"><div className="mb-5"><Link to="/admin" className="text-sm text-amber-900 underline">← Trở về quản trị</Link><h1 className="mt-2 text-3xl font-bold">{id?'Chỉnh sửa hồ sơ':'Thêm thành viên'}</h1></div><form onSubmit={submit} className="grid gap-4 rounded-2xl border bg-white p-6 sm:grid-cols-2">{error&&<p className="sm:col-span-2 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}<Field label="Họ và tên"><input required className={input} value={form.fullName} onChange={e=>change('fullName',e.target.value)}/></Field><Field label="Giới tính"><select className={input} value={form.gender} onChange={e=>change('gender',e.target.value)}><option value="male">Nam</option><option value="female">Nữ</option></select></Field><Field label="Đời thứ"><input type="number" min="1" required className={input} value={form.generation} onChange={e=>change('generation',e.target.value)}/></Field><Field label="Chi họ"><select className={input} value={form.branchId} onChange={e=>change('branchId',e.target.value)} required><option value="">Chọn chi họ</option>{editableBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field><Field label="Ngày sinh (dương lịch)"><input type="date" className={input} value={form.birthDate} onChange={e=>change('birthDate',e.target.value)}/></Field><Field label="Trạng thái"><select className={input} value={String(form.isAlive)} onChange={e=>change('isAlive',e.target.value==='true')}><option value="true">Còn sống</option><option value="false">Đã mất</option></select></Field>{!form.isAlive&&<><Field label="Ngày mất (ngày ghi nhận)"><input type="date" className={input} value={form.deathDate} onChange={e=>change('deathDate',e.target.value)}/></Field><Field label="Lịch ngày giỗ"><select className={input} value={form.deathCalendar} onChange={e=>change('deathCalendar',e.target.value)}><option value="solar">Dương lịch</option><option value="lunar">Âm lịch</option></select></Field></>}<Field label="Cha/mẹ trong dòng họ"><select className={input} value={form.parentId} onChange={e=>change('parentId',e.target.value)}><option value="">Không có</option>{members.filter(m=>m.id!==id&&m.generation===Number(form.generation)-1).map(m=><option key={m.id} value={m.id}>{m.fullName}</option>)}</select></Field><Field label="Vợ/chồng"><select className={input} value={form.spouseId} onChange={e=>change('spouseId',e.target.value)}><option value="">Không có</option>{members.filter(m=>m.id!==id&&m.generation===Number(form.generation)).map(m=><option key={m.id} value={m.id}>{m.fullName}</option>)}</select></Field><Field label="Con thứ"><input className={input} type="number" min="1" value={form.orderInFamily} onChange={e=>change('orderInFamily',e.target.value)}/></Field><Field label="URL ảnh đại diện"><input className={input} type="url" value={form.avatarUrl} onChange={e=>change('avatarUrl',e.target.value)}/></Field><Field label="Nơi an táng"><input className={input} value={form.burialPlace} onChange={e=>change('burialPlace',e.target.value)}/></Field><Field label="Hiển thị công khai"><label className="flex gap-2 pt-2"><input type="checkbox" checked={form.isPublic} onChange={e=>change('isPublic',e.target.checked)}/> Cho phép khách xem hồ sơ</label></Field><div className="sm:col-span-2"><Field label="Tiểu sử"><textarea rows="4" className={input} value={form.bio} onChange={e=>change('bio',e.target.value)}/></Field></div><div className="sm:col-span-2 flex gap-3"><button disabled={busy} className={btn}>{busy?'Đang lưu...':'Lưu thành viên'}</button><button type="button" className="rounded-xl border px-4 py-2" onClick={()=>navigate('/admin')}>Hủy</button></div></form></div>}
-function Field({label,children}){return <label className="block text-sm font-medium">{label}<div className="mt-1">{children}</div></label>}
-function Accounts({profiles,branches,onUpdate}){const [message,setMessage]=useState('');async function update(userId,key,value){try{const profile=profiles.find(p=>p.user_id===userId);const next={role:profile.role,branch_id:profile.branch_id,[key]:value};if(next.role==='branch_admin'&&!next.branch_id)throw Error('Chọn chi họ trước khi cấp quyền quản trị chi');if(next.role==='super_admin')next.branch_id=null;await onUpdate(userId,next);setMessage('Đã lưu quyền tài khoản')}catch(e){setMessage(e.message)}}return <><h1 className="mb-2 text-3xl font-bold">Quản lý tài khoản</h1><p className="mb-5 text-sm text-stone-500">Người dùng đăng ký qua trang Đăng nhập. Super Admin cấp quyền ở đây. Không được xóa Super Admin cuối cùng.</p>{message&&<p className="mb-4 rounded-lg bg-amber-50 p-3">{message}</p>}<div className="space-y-3">{profiles.map(p=><div key={p.user_id} className="grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-3"><div><b>{p.display_name||'Chưa đặt tên'}</b><p className="break-all text-xs text-stone-500">{p.user_id}</p></div><select className={input} value={p.branch_id||''} onChange={e=>update(p.user_id,'branch_id',e.target.value||null)}><option value="">Chưa gán chi họ</option>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select><select className={input} value={p.role} onChange={e=>update(p.user_id,'role',e.target.value)}><option value="member">Thành viên</option><option value="branch_admin">Quản trị chi họ</option><option value="super_admin">Super Admin</option></select></div>)}</div></>}
-export default function App(){return <BrowserRouter><Shell/></BrowserRouter>}
+import {
+	mockMembers
+} from './data/mockData';
+import {
+	supabase,
+	configured
+} from './lib/supabase';
+const blank = {
+	fullName: '',
+	gender: 'male',
+	generation: 1,
+	birthDate: '',
+	deathDate: '',
+	deathCalendar: 'solar',
+	isAlive: true,
+	avatarUrl: '',
+	parentId: '',
+	spouseId: '',
+	orderInFamily: '',
+	bio: '',
+	burialPlace: '',
+	branchId: '',
+	isPublic: false
+};
+const labels = {
+	super_admin: 'Super Admin',
+	branch_admin: 'Quản trị chi họ',
+	member: 'Thành viên'
+};
+const btn = 'rounded-xl bg-amber-900 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50';
+const input = 'w-full rounded-xl border border-stone-300 bg-white px-3 py-2 outline-none focus:border-amber-700';
+const toUi = (r, branches) => ({
+	id: r.id,
+	fullName: r.full_name,
+	gender: r.gender,
+	generation: r.generation,
+	birthDate: r.birth_date || '',
+	deathDate: r.death_date || '',
+	deathCalendar: r.death_calendar,
+	isAlive: r.is_alive,
+	avatarUrl: r.avatar_url || '',
+	parentId: r.parent_id || '',
+	spouseId: r.spouse_id || '',
+	orderInFamily: r.order_in_family || '',
+	bio: r.bio || '',
+	burialPlace: r.burial_place || '',
+	branchId: r.branch_id,
+	branch: branches.find(b => b.id === r.branch_id)?.name || '',
+	isPublic: r.is_public
+});
+const toDb = m => ({
+	full_name: m.fullName.trim(),
+	gender: m.gender,
+	generation: Number(m.generation),
+	birth_date: m.birthDate || null,
+	death_date: m.isAlive ? null : m.deathDate || null,
+	death_calendar: m.deathCalendar,
+	is_alive: m.isAlive,
+	avatar_url: m.avatarUrl || null,
+	parent_id: m.parentId || null,
+	spouse_id: m.spouseId || null,
+	order_in_family: m.orderInFamily ? Number(m.orderInFamily) : null,
+	bio: m.bio || null,
+	burial_place: m.burialPlace || null,
+	branch_id: m.branchId,
+	is_public: m.isPublic
+});
+
+function Shell() {
+	const [session, setSession] = useState(null), [profile, setProfile] = useState(null), [members, setMembers] = useState([]), [branches, setBranches] = useState([]), [profiles, setProfiles] = useState([]), [loading, setLoading] = useState(configured), [error, setError] = useState('');
+	const navigate = useNavigate();
+	async function refreshProfile(user) {
+		if (!user) {
+			setProfile(null);
+			return;
+		}
+		const {
+			data,
+			error
+		} = await supabase.from('profiles').select('*').eq('user_id', user.id).single();
+		if (error) setError(error.message);
+		setProfile(data || null);
+	}
+	async function refresh() {
+		if (!configured) return;
+		const [bs, ms] = await Promise.all([supabase.from('branches').select('*').order('name'), supabase.from('members').select('*').order('generation')]);
+		if (bs.error || ms.error) setError(bs.error?.message || ms.error?.message);
+		setBranches(bs.data || []);
+		setMembers((ms.data || []).map(m => toUi(m, bs.data || [])));
+	}
+	async function refreshUsers() {
+		if (!configured || profile?.role !== 'super_admin') return;
+		const {
+			data,
+			error
+		} = await supabase.from('profiles').select('*').order('created_at');
+		if (error) setError(error.message);
+		setProfiles(data || []);
+	}
+	useEffect(() => {
+		if (!configured) return;
+		let active = true;
+		supabase.auth.getSession().then(async ({
+			data
+		}) => {
+			if (!active) return;
+			setSession(data.session);
+			await refreshProfile(data.session?.user);
+			await refresh();
+			if (active) setLoading(false);
+		});
+		const {
+			data: {
+				subscription
+			}
+		} = supabase.auth.onAuthStateChange((_event, s) => {
+			if (!active) return;
+			setSession(s);
+			setTimeout(() => {
+				if (active) {
+					refreshProfile(s?.user);
+					refresh();
+				}
+			}, 0);
+		});
+		return () => {
+			active = false;
+			subscription.unsubscribe();
+		};
+	}, []);
+	useEffect(() => {
+		if (profile?.role === 'super_admin') refreshUsers();
+	}, [profile?.role]);
+	const canEdit = profile?.role === 'super_admin' || profile?.role === 'branch_admin';
+	const canEditMember = m => profile?.role === 'super_admin' || (profile?.role === 'branch_admin' && m.branchId === profile.branch_id);
+	const canCreateIn = id => profile?.role === 'super_admin' || (profile?.role === 'branch_admin' && id === profile.branch_id);
+	async function saveMember(form, id) {
+		setError('');
+		if (!canCreateIn(form.branchId) || id && !canEditMember(members.find(m => m.id === id) || {})) throw Error('Không có quyền sửa chi họ này');
+		if (!form.fullName.trim()) throw Error('Vui lòng nhập họ tên');
+		if (form.parentId === id || form.spouseId === id) throw Error('Không thể liên kết với chính mình');
+		if (form.parentId && members.find(m => m.id === form.parentId)?.generation !== Number(form.generation) - 1) throw Error('Đời của con phải lớn hơn cha/mẹ đúng một đời');
+		if (form.spouseId && members.find(m => m.id === form.spouseId)?.generation !== Number(form.generation)) throw Error('Vợ/chồng phải cùng đời');
+		const q = id ? supabase.from('members').update(toDb(form)).eq('id', id) : supabase.from('members').insert(toDb(form));
+		const {
+			error
+		} = await q;
+		if (error) throw Error(error.message);
+		await refresh();
+	}
+	async function deleteMember(m) {
+		if (!canEditMember(m)) throw Error('Không có quyền');
+		if (members.some(x => x.parentId === m.id)) throw Error('Thành viên có con, cần chuyển quan hệ trước khi xóa');
+		if (!window.confirm(`Xóa ${m.fullName}?`)) return;
+		const {
+			error
+		} = await supabase.from('members').delete().eq('id', m.id);
+		if (error) throw Error(error.message);
+		await refresh();
+	}
+	async function updateProfile(userId, changes) {
+		const {
+			error
+		} = await supabase.from('profiles').update(changes).eq('user_id', userId);
+		if (error) throw Error(error.message);
+		await refreshUsers();
+	}
+	async function addBranch(name) {
+		const {
+			error
+		} = await supabase.from('branches').insert({
+			name: name.trim()
+		});
+		if (error) throw Error(error.message);
+		await refresh();
+	}
+	if (!configured) return < div className = "mx-auto mt-20 max-w-xl rounded-2xl border bg-white p-8" > < h1 className = "text-2xl font-bold" > Gia Phả Việt· Cấu hình Supabase < /h1><p className="mt-4">Tạo file <code>.env</code > từ < code > .env.example < /code>, điền URL và publishable/anon
+	key của Supabase, sau đó chạy lại < code > npm run dev < /code>.</p > < p className = "mt-4 text-stone-500" > Xem README.md để tạo bảng, phân quyền và khởi tạo Super Admin. < /p></div > ;
+	if (loading) return < p className = "p-10 text-center" > Đang tải dữ liệu... < /p>;
+	return < div className = "min-h-screen bg-[#faf8f3] text-stone-800" > < header className = "border-b bg-white" > < div className = "mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4" > < Link to = "/"
+	className = "flex items-center gap-2 font-bold text-xl text-amber-950" > < GitBranch / > GIA PHẢ VIỆT < /Link><nav className="flex flex-wrap items-center gap-3 text-sm"><NavLink to="/
+	" className="
+	hover: underline ">Cây gia phả</NavLink>{canEdit&&<NavLink to=" / admin " className="
+	hover: underline ">Quản trị</NavLink>}{profile?.role==='super_admin'&&<NavLink to=" / admin / accounts " className="
+	hover: underline ">Tài khoản</NavLink>}{session?<><span className="
+	hidden text - stone - 500 sm: inline ">{profile?.display_name||session.user.email} · {labels[profile?.role]||'Thành viên'}</span><button className="
+	flex items - center gap - 1 " onClick={async()=>{await supabase.auth.signOut();navigate('/');}}><LogOut size={16}/> Đăng xuất</button></>:<Link to=" / login " className="
+	flex items - center gap - 1 "><LogIn size={16}/> Đăng nhập</Link>}</nav></div></header> {
+			error && < div className = "mx-auto mt-3 max-w-7xl rounded-lg bg-red-50 p-3 text-sm text-red-700" > {
+				error
+			} < button className = "ml-3 underline"
+			onClick = {
+				() => setError('')
+			} > Đóng < /button></div >
+		} <
+		main className = "mx-auto max-w-7xl p-4 md:p-6" > < Routes >
+		<
+		Route path = "/"
+	element = {
+			< Tree members = {
+				members
+			}
+			session = {
+				session
+			}
+			canEdit = {
+				canEdit
+			}
+			onEdit = {
+				m => navigate('/admin/members/' + m.id)
+			}
+			/>}/ >
+			<
+			Route path = "/login"
+			element = {
+				session ? < Navigate to = "/" / > : < Login / >
+			}
+			/> <
+			Route path = "/admin"
+			element = {
+				canEdit ? < Dashboard members = {
+					members
+				}
+				branches = {
+					branches
+				}
+				profile = {
+					profile
+				}
+				canEditMember = {
+					canEditMember
+				}
+				onDelete = {
+					deleteMember
+				}
+				onAddBranch = {
+					addBranch
+				}
+				onRefresh = {
+					refresh
+				}
+				/>:<Navigate to="/login
+				"/>}/> <
+				Route path = "/admin/members/new"
+				element = {
+					canEdit ? < Editor members = {
+						members
+					}
+					branches = {
+						branches
+					}
+					profile = {
+						profile
+					}
+					onSave = {
+						saveMember
+					}
+					/>:<Navigate to="/login
+					"/>}/> <
+					Route path = "/admin/members/:id"
+					element = {
+						canEdit ? < Editor members = {
+							members
+						}
+						branches = {
+							branches
+						}
+						profile = {
+							profile
+						}
+						onSave = {
+							saveMember
+						}
+						/>:<Navigate to="/login
+						"/>}/> <
+						Route path = "/admin/accounts"
+						element = {
+							profile?.role === 'super_admin' ? < Accounts profiles = {
+								profiles
+							}
+							branches = {
+								branches
+							}
+							onUpdate = {
+								updateProfile
+							}
+							/>:<Navigate to="/
+							"/>}/> <
+							Route path = "*"
+							element = {
+								< Navigate to = "/" / >
+							}
+							/> <
+							/Routes></main > < /div>;
+						}
+
+						function Login() {
+							const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [name, setName] = useState(''), [register, setRegister] = useState(false), [message, setMessage] = useState(''), [busy, setBusy] = useState(false);
+							const navigate = useNavigate();
+							async function submit(e) {
+								e.preventDefault();
+								setBusy(true);
+								setMessage('');
+								const result = register ? await supabase.auth.signUp({
+									email,
+									password,
+									options: {
+										data: {
+											full_name: name
+										}
+									}
+								}) : await supabase.auth.signInWithPassword({
+									email,
+									password
+								});
+								setBusy(false);
+								if (result.error) setMessage(result.error.message);
+								else if (register) setMessage('Đã gửi yêu cầu đăng ký. Kiểm tra email xác nhận (nếu được bật), sau đó đăng nhập.');
+								else navigate('/');
+							}
+							return < div className = "mx-auto mt-10 max-w-md rounded-2xl border bg-white p-7 shadow-sm" > < h1 className = "mb-5 text-2xl font-bold" > {
+								register ? 'Đăng ký tài khoản' : 'Đăng nhập Gia Phả Việt'
+							} < /h1><form onSubmit={submit} className="space-y-4">{register&&<label className="block text-sm">Họ tên<input className={input} value={name} onChange={e=>setName(e.target.value)} required/ > < /label>}<label className="block text-sm">Email<input className={input} type="email" value={email} onChange={e=>setEmail(e.target.value)} required/ > < /label><label className="block text-sm">Mật khẩu<input className={input} type="password" minLength={6} value={password} onChange={e=>setPassword(e.target.value)} required/ > < /label><button className={btn+' w-full'} disabled={busy}>{busy?'Đang xử lý...':register?'Đăng ký':'Đăng nhập'}</button > < /form>{message&&<p className="mt-3 text-sm text-amber-900">{message}</p >
+						} < button className = "mt-5 text-sm text-amber-900 underline"
+						onClick = {
+							() => {
+								setRegister(!register);
+								setMessage('');
+							}
+						} > {
+							register ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký'
+						} < /button><p className="mt-3 text-xs text-stone-500">Tài khoản mới mặc định là thành viên; Super Admin cấp quyền quản trị.</p > < /div>}
+
+						function Tree({
+							members,
+							session,
+							canEdit,
+							onEdit
+						}) {
+							const [selected, setSelected] = useState(''), [query, setQuery] = useState(''), [status, setStatus] = useState('all'), [branch, setBranch] = useState('all'), [view, setView] = useState('tree'), [focus, setFocus] = useState(''), [collapsed, setCollapsed] = useState([]);
+							const branches = [...new Set(members.map(m => m.branch).filter(Boolean))];
+							const filtered = members.filter(m => (m.fullName + ' ' + m.branch + ' đời thứ ' + m.generation).toLowerCase().includes(query.toLowerCase()) && (status === 'all' || (status === 'alive') === m.isAlive) && (branch === 'all' || branch === m.branch));
+							const person = members.find(m => m.id === selected);
+
+							function exportJson() {
+								const blob = new Blob([JSON.stringify(members, null, 2)], {
+										type: 'application/json'
+									}),
+									url = URL.createObjectURL(blob),
+									a = document.createElement('a');
+								a.href = url;
+								a.download = 'gia-pha-viet-backup.json';
+								a.click();
+								URL.revokeObjectURL(url);
+							}
+							return < > < div className = "mb-5 flex flex-wrap items-center justify-between gap-3" > < div > < h1 className = "text-3xl font-bold text-amber-950" > Cây gia phả dòng họ < /h1><p className="mt-1 text-stone-500">{members.length} thành viên · {new Set(members.map(m=>m.generation)).size} thế hệ</p > < /div><button onClick={exportJson} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2"><Download size={16}/ > Xuất JSON < /button></div > < div className = "mb-4 grid gap-3 sm:grid-cols-4" > < input className = {
+								input + ' sm:col-span-2'
+							}
+							placeholder = "Tìm tên, chi họ, đời thứ..."
+							value = {
+								query
+							}
+							onChange = {
+								e => {
+									setQuery(e.target.value);
+									const match = members.find(m => m.fullName.toLowerCase().includes(e.target.value.toLowerCase()));
+									setFocus(e.target.value ? match?.id || '' : '');
+								}
+							}
+							/><select className={input} value={branch} onChange={e=>setBranch(e.target.value)}><option value="all">Tất cả chi họ</option > {
+								branches.map(b => < option key = {
+										b
+									} > {
+										b
+									} < /option>)}</select > < select className = {
+										input
+									}
+									value = {
+										status
+									}
+									onChange = {
+										e => setStatus(e.target.value)
+									} > < option value = "all" > Tất cả < /option><option value="alive">Còn sống</option > < option value = "deceased" > Đã mất < /option></select > < /div><div className="mb-3 flex gap-2"><button className={view==='tree'?btn:'rounded-xl border bg-white px-4 py-2'} onClick={()=>setView('tree')}>Sơ đồ</button > < button className = {
+										view === 'list' ? btn : 'rounded-xl border bg-white px-4 py-2'
+									}
+									onClick = {
+										() => setView('list')
+									} > Danh sách < /button></div > {
+										view === 'tree' ? < ReactFlowProvider > < FamilyTreeCanvas members = {
+											filtered
+										}
+										onSelect = {
+											setSelected
+										}
+										focusId = {
+											focus
+										}
+										collapsed = {
+											collapsed
+										}
+										/></ReactFlowProvider > : < div className = "grid gap-2 md:grid-cols-2" > {
+											filtered.map(m => < button key = {
+													m.id
+												}
+												onClick = {
+													() => setSelected(m.id)
+												}
+												className = "rounded-xl border bg-white p-4 text-left hover:border-amber-700" > < b > {
+													m.fullName
+												} < /b><p className="text-sm text-stone-500">Đời thứ {m.generation} · {m.branch} · {m.isAlive?'Còn sống':'Đã mất'}</p > < /button>)}</div >
+											} {
+												filtered.length === 0 && < p className = "mt-4" > Không tìm thấy thành viên phù hợp. < /p>}{person&&<MemberDrawer member={person} members={members} onClose={()=>setSelected('')} onEdit={onEdit} onAdd={()=>{}} onToggle={id=>setCollapsed(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])} collapsed={collapsed} admin={canEdit}/ >
+											} < />}
+
+											function Dashboard({
+												members,
+												branches,
+												profile,
+												canEditMember,
+												onDelete,
+												onAddBranch,
+												onRefresh
+											}) {
+												const [branchName, setBranchName] = useState(''), [message, setMessage] = useState('');
+												const navigate = useNavigate();
+												const editable = members.filter(canEditMember);
+												async function remove(m) {
+													try {
+														await onDelete(m);
+														setMessage('Đã xử lý yêu cầu.')
+													} catch (e) {
+														setMessage(e.message)
+													}
+												}
+												async function createBranch(e) {
+													e.preventDefault();
+													try {
+														await onAddBranch(branchName);
+														setBranchName('');
+														setMessage('Đã tạo chi họ')
+													} catch (e) {
+														setMessage(e.message)
+													}
+												}
+												async function importJson(e) {
+													const f = e.target.files?.[0];
+													e.target.value = '';
+													if (!f) return;
+													try {
+														const rows = JSON.parse(await f.text());
+														if (!Array.isArray(rows) || rows.length > 500) throw Error('JSON phải là mảng tối đa 500 thành viên');
+														setMessage('Tệp hợp lệ. Để tránh ghi đè quan hệ và vượt quyền, hãy nhập từng thành viên tại trang quản trị. Tính năng nhập hàng loạt chưa bật.')
+													} catch (err) {
+														setMessage(err.message)
+													}
+												}
+												return < > < div className = "mb-5 flex flex-wrap justify-between gap-3" > < div > < h1 className = "text-3xl font-bold" > Bảng điều khiển < /h1><p className="text-stone-500">{labels[profile.role]} · {editable.length} hồ sơ được phép quản lý</p > < /div><Link className={btn+' flex items-center gap-2'} to="/admin / members / new "><Plus size={16}/> Thêm thành viên</Link></div>{message&&<p className="
+												mb - 3 rounded - lg bg - amber - 50 p - 3 text - sm ">{message}</p>}<div className="
+												mb - 5 grid grid - cols - 2 gap - 3 md: grid - cols - 3 ">{[['Thành viên',members.length],['Chi họ',branches.length],['Đời',new Set(members.map(m=>m.generation)).size]].map(([k,v])=><div key={k} className="
+												rounded - xl border bg - white p - 5 "><p className="
+												text - sm text - stone - 500 ">{k}</p><b className="
+												text - 3 xl ">{v}</b></div>)}</div>{profile.role==='super_admin'&&<form onSubmit={createBranch} className="
+												mb - 5 flex max - w - lg gap - 2 "><input className={input} placeholder="
+												Tên chi họ mới " value={branchName} onChange={e=>setBranchName(e.target.value)} required/><button className={btn}>Tạo chi</button></form>}<div className="
+												overflow - x - auto rounded - xl border bg - white "><table className="
+												w - full text - left text - sm "><thead className="
+												bg - stone - 100 "><tr><th className="
+												p - 3 ">Thành viên</th><th className="
+												p - 3 ">Đời</th><th className="
+												p - 3 ">Chi họ</th><th className="
+												p - 3 ">Công khai</th><th className="
+												p - 3 ">Thao tác</th></tr></thead><tbody>{members.map(m=><tr key={m.id} className="
+												border - t "><td className="
+												p - 3 font - medium ">{m.fullName}</td><td className="
+												p - 3 ">{m.generation}</td><td className="
+												p - 3 ">{m.branch}</td><td className="
+												p - 3 ">{m.isPublic?'Có':'Không'}</td><td className="
+												p - 3 ">{canEditMember(m)?<><button onClick={()=>navigate('/admin/members/'+m.id)} className="
+												mr - 3 text - amber - 900 underline ">Sửa</button><button onClick={()=>remove(m)} className="
+												text - red - 700 underline ">Xóa</button></>:'Chỉ xem'}</td></tr>)}</tbody></table></div><p className="
+												mt - 3 text - xs text - stone - 500 ">Xuất JSON tại trang cây gia phả. Nhập hàng loạt cần quy trình xác thực dữ liệu và quan hệ trước khi bật trên máy chủ.</p></>}
+
+												function Editor({
+													members,
+													branches,
+													profile,
+													onSave
+												}) {
+													const {
+														id
+													} = useParams();
+													const current = members.find(m => m.id === id);
+													const navigate = useNavigate();
+													const [form, setForm] = useState(() => current ? {
+														...blank,
+														...current
+													} : {
+														...blank,
+														branchId: profile.role === 'branch_admin' ? profile.branch_id : branches[0]?.id || ''
+													});
+													const [error, setError] = useState(''), [busy, setBusy] = useState(false);
+													useEffect(() => {
+														setForm(current ? {
+															...blank,
+															...current
+														} : {
+															...blank,
+															branchId: profile.role === 'branch_admin' ? profile.branch_id : branches[0]?.id || ''
+														});
+													}, [id, current?.id, branches.length]);
+													const change = (k, v) => setForm(f => ({
+														...f,
+														[k]: v
+													}));
+													const editableBranches = profile.role === 'super_admin' ? branches : branches.filter(b => b.id === profile.branch_id);
+													if (id && !current) return < p > Không tìm thấy hồ sơ hoặc bạn không có quyền truy cập. < /p>;if(current&&profile.role!=='super_admin'&&current.branchId!==profile.branch_id)return <Navigate to="/admin
+													"/>;async function submit(e){e.preventDefault();setBusy(true);setError('');try{await onSave(form,id);navigate('/admin')}catch(err){setError(err.message)}finally{setBusy(false)}}return <div className="
+													mx - auto max - w - 3 xl "><div className="
+													mb - 5 "><Link to=" / admin " className="
+													text - sm text - amber - 900 underline ">← Trở về quản trị</Link><h1 className="
+													mt - 2 text - 3 xl font - bold ">{id?'Chỉnh sửa hồ sơ':'Thêm thành viên'}</h1></div><form onSubmit={submit} className="
+													grid gap - 4 rounded - 2 xl border bg - white p - 6 sm: grid - cols - 2 ">{error&&<p className="
+													sm: col - span - 2 rounded - lg bg - red - 50 p - 3 text - red - 700 ">{error}</p>}<Field label="
+													Họ và tên "><input required className={input} value={form.fullName} onChange={e=>change('fullName',e.target.value)}/></Field><Field label="
+													Giới tính "><select className={input} value={form.gender} onChange={e=>change('gender',e.target.value)}><option value="
+													male ">Nam</option><option value="
+													female ">Nữ</option></select></Field><Field label="
+													Đời thứ "><input type="
+													number " min="
+													1 " required className={input} value={form.generation} onChange={e=>change('generation',e.target.value)}/></Field><Field label="
+													Chi họ "><select className={input} value={form.branchId} onChange={e=>change('branchId',e.target.value)} required><option value="
+													">Chọn chi họ</option>{editableBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field><Field label="
+													Ngày sinh(dương lịch)
+													"><input type="
+													date " className={input} value={form.birthDate} onChange={e=>change('birthDate',e.target.value)}/></Field><Field label="
+													Trạng thái "><select className={input} value={String(form.isAlive)} onChange={e=>change('isAlive',e.target.value==='true')}><option value="
+													true ">Còn sống</option><option value="
+													false ">Đã mất</option></select></Field>{!form.isAlive&&<><Field label="
+													Ngày mất(ngày ghi nhận)
+													"><input type="
+													date " className={input} value={form.deathDate} onChange={e=>change('deathDate',e.target.value)}/></Field><Field label="
+													Lịch ngày giỗ "><select className={input} value={form.deathCalendar} onChange={e=>change('deathCalendar',e.target.value)}><option value="
+													solar ">Dương lịch</option><option value="
+													lunar ">Âm lịch</option></select></Field></>}<Field label="
+													Cha / mẹ trong dòng họ "><select className={input} value={form.parentId} onChange={e=>change('parentId',e.target.value)}><option value="
+													">Không có</option>{members.filter(m=>m.id!==id&&m.generation===Number(form.generation)-1).map(m=><option key={m.id} value={m.id}>{m.fullName}</option>)}</select></Field><Field label="
+													Vợ / chồng "><select className={input} value={form.spouseId} onChange={e=>change('spouseId',e.target.value)}><option value="
+													">Không có</option>{members.filter(m=>m.id!==id&&m.generation===Number(form.generation)).map(m=><option key={m.id} value={m.id}>{m.fullName}</option>)}</select></Field><Field label="
+													Con thứ "><input className={input} type="
+													number " min="
+													1 " value={form.orderInFamily} onChange={e=>change('orderInFamily',e.target.value)}/></Field><Field label="
+													URL ảnh đại diện "><input className={input} type="
+													url " value={form.avatarUrl} onChange={e=>change('avatarUrl',e.target.value)}/></Field><Field label="
+													Nơi an táng "><input className={input} value={form.burialPlace} onChange={e=>change('burialPlace',e.target.value)}/></Field><Field label="
+													Hiển thị công khai "><label className="
+													flex gap - 2 pt - 2 "><input type="
+													checkbox " checked={form.isPublic} onChange={e=>change('isPublic',e.target.checked)}/> Cho phép khách xem hồ sơ</label></Field><div className="
+													sm: col - span - 2 "><Field label="
+													Tiểu sử "><textarea rows="
+													4 " className={input} value={form.bio} onChange={e=>change('bio',e.target.value)}/></Field></div><div className="
+													sm: col - span - 2 flex gap - 3 "><button disabled={busy} className={btn}>{busy?'Đang lưu...':'Lưu thành viên'}</button><button type="
+													button " className="
+													rounded - xl border px - 4 py - 2 " onClick={()=>navigate('/admin')}>Hủy</button></div></form></div>}
+
+													function Field({
+														label,
+														children
+													}) {
+														return < label className = "block text-sm font-medium" > {
+															label
+														} < div className = "mt-1" > {
+															children
+														} < /div></label >
+													}
+
+													function Accounts({
+														profiles,
+														branches,
+														onUpdate
+													}) {
+														const [message, setMessage] = useState('');
+														async function update(userId, key, value) {
+															try {
+																const profile = profiles.find(p => p.user_id === userId);
+																const next = {
+																	role: profile.role,
+																	branch_id: profile.branch_id,
+																	[key]: value
+																};
+																if (next.role === 'branch_admin' && !next.branch_id) throw Error('Chọn chi họ trước khi cấp quyền quản trị chi');
+																if (next.role === 'super_admin') next.branch_id = null;
+																await onUpdate(userId, next);
+																setMessage('Đã lưu quyền tài khoản')
+															} catch (e) {
+																setMessage(e.message)
+															}
+														}
+														return < > < h1 className = "mb-2 text-3xl font-bold" > Quản lý tài khoản < /h1><p className="mb-5 text-sm text-stone-500">Người dùng đăng ký qua trang Đăng nhập. Super Admin cấp quyền ở đây. Không được xóa Super Admin cuối cùng.</p > {
+															message && < p className = "mb-4 rounded-lg bg-amber-50 p-3" > {
+																message
+															} < /p>}<div className="space-y-3">{profiles.map(p=><div key={p.user_id} className="grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-3"><div><b>{p.display_name||'Chưa đặt tên'}</b > < p className = "break-all text-xs text-stone-500" > {
+																p.user_id
+															} < /p></div > < select className = {
+																input
+															}
+															value = {
+																p.branch_id || ''
+															}
+															onChange = {
+																e => update(p.user_id, 'branch_id', e.target.value || null)
+															} > < option value = "" > Chưa gán chi họ < /option>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option > )
+													} < /select><select className={input} value={p.role} onChange={e=>update(p.user_id,'role',e.target.value)}><option value="member">Thành viên</option > < option value = "branch_admin" > Quản trị chi họ < /option><option value="super_admin">Super Admin</option > < /select></div > )
+											} < /div></ >
+										}
+										export default function App() {
+											return < BrowserRouter > < Shell / > < /BrowserRouter>}

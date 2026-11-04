@@ -30,6 +30,12 @@ Vào Authentication > Providers > Email: bật Email. Với môi trường thậ
 
 Trong Authentication > URL Configuration: đặt Site URL và Redirect URLs cho `http://localhost:5173` và tên miền triển khai.
 
+### Bổ sung biệt danh cho thành viên
+
+Với database đã có bảng `public.members`, chạy tệp `supabase/migrations/20261104_add_member_nickname.sql` trong Supabase SQL Editor trước khi dùng phiên bản này. Với database mới, chạy tệp này sau khi tạo bảng `members`. Migration bổ sung cột `nickname` không bắt buộc, giữ nguyên các hồ sơ hiện có.
+
+Trường **Biệt danh** có thể nhập, sửa hoặc xóa trong biểu mẫu thành viên. Biệt danh hiển thị trên sơ đồ, danh sách, hồ sơ chi tiết và bảng quản trị; có thể tìm kiếm và được lưu trong bản xuất JSON.
+
 ## 4. Tạo Super Admin đầu tiên
 1. Chạy ứng dụng và đăng ký tài khoản email của bạn, xác nhận email nếu được yêu cầu.
 2. Vào Supabase > SQL Editor, thay email trong lệnh sau bằng email đã đăng ký:

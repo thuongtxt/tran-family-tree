@@ -39,6 +39,7 @@ import {
 } from './lib/supabase';
 const blank = {
 	fullName: '',
+	nickname: '',
 	gender: 'male',
 	generation: 1,
 	birthDate: '',
@@ -64,6 +65,7 @@ const input = 'w-full rounded-xl border border-stone-300 bg-white px-3 py-2 outl
 const toUi = (r, branches) => ({
 	id: r.id,
 	fullName: r.full_name,
+	nickname: r.nickname || '',
 	gender: r.gender,
 	generation: r.generation,
 	birthDate: r.birth_date || '',
@@ -82,6 +84,7 @@ const toUi = (r, branches) => ({
 });
 const toDb = m => ({
 	full_name: m.fullName.trim(),
+	nickname: m.nickname?.trim() || null,
 	gender: m.gender,
 	generation: Number(m.generation),
 	birth_date: m.birthDate || null,
@@ -371,7 +374,7 @@ function Shell() {
 						}) {
 							const [selected, setSelected] = useState(''), [query, setQuery] = useState(''), [status, setStatus] = useState('all'), [branch, setBranch] = useState('all'), [view, setView] = useState('tree'), [focus, setFocus] = useState(''), [collapsed, setCollapsed] = useState([]);
 							const branches = [...new Set(members.map(m => m.branch).filter(Boolean))];
-							const filtered = members.filter(m => (m.fullName + ' ' + m.branch + ' đời thứ ' + m.generation).toLowerCase().includes(query.toLowerCase()) && (status === 'all' || (status === 'alive') === m.isAlive) && (branch === 'all' || branch === m.branch));
+							const filtered = members.filter(m => (m.fullName + ' ' + (m.nickname || '') + ' ' + m.branch + ' đời thứ ' + m.generation).toLowerCase().includes(query.toLowerCase()) && (status === 'all' || (status === 'alive') === m.isAlive) && (branch === 'all' || branch === m.branch));
 							const person = members.find(m => m.id === selected);
 
 							function exportJson() {
@@ -388,14 +391,14 @@ function Shell() {
 							return < > < div className = "mb-5 flex flex-wrap items-center justify-between gap-3" > < div > < h1 className = "text-3xl font-bold text-amber-950" > Cây gia phả dòng họ < /h1><p className="mt-1 text-stone-500">{members.length} thành viên · {new Set(members.map(m=>m.generation)).size} thế hệ</p > < /div><button onClick={exportJson} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2"><Download size={16}/ > Xuất JSON < /button></div > < div className = "mb-4 grid gap-3 sm:grid-cols-4" > < input className = {
 								input + ' sm:col-span-2'
 							}
-							placeholder = "Tìm tên, chi họ, đời thứ..."
+							placeholder = "Tìm tên, biệt danh, chi họ, đời thứ..."
 							value = {
 								query
 							}
 							onChange = {
 								e => {
 									setQuery(e.target.value);
-									const match = members.find(m => m.fullName.toLowerCase().includes(e.target.value.toLowerCase()));
+									const match = members.find(m => (m.fullName + ' ' + (m.nickname || '')).toLowerCase().includes(e.target.value.toLowerCase()));
 									setFocus(e.target.value ? match?.id || '' : '');
 								}
 							}
@@ -439,7 +442,7 @@ function Shell() {
 												}
 												className = "rounded-xl border bg-white p-4 text-left hover:border-amber-700" > < b > {
 													m.fullName
-												} < /b><p className="text-sm text-stone-500">Đời thứ {m.generation} · {m.branch} · {m.isAlive?'Còn sống':'Đã mất'}</p > < /button>)}</div >
+												} < /b>{m.nickname && <p className="text-sm text-stone-500">Biệt danh: {m.nickname}</p>}<p className="text-sm text-stone-500">Đời thứ {m.generation} · {m.branch} · {m.isAlive?'Còn sống':'Đã mất'}</p > < /button>)}</div >
 											} {
 												filtered.length === 0 && < p className = "mt-4" > Không tìm thấy thành viên phù hợp. < /p>}{person&&<MemberDrawer member={person} members={members} onClose={()=>setSelected('')} onEdit={onEdit} onAdd={()=>{}} onToggle={id=>setCollapsed(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])} collapsed={collapsed} admin={canEdit}/ >
 											} < />}
@@ -503,7 +506,7 @@ function Shell() {
 												p - 3 ">Công khai</th><th className="
 												p - 3 ">Thao tác</th></tr></thead><tbody>{members.map(m=><tr key={m.id} className="
 												border - t "><td className="
-												p - 3 font - medium ">{m.fullName}</td><td className="
+												p - 3 font - medium ">{m.fullName}{m.nickname && <div className="text-sm font-normal text-stone-500">Biệt danh: {m.nickname}</div>}</td><td className="
 												p - 3 ">{m.generation}</td><td className="
 												p - 3 ">{m.branch}</td><td className="
 												p - 3 ">{m.isPublic?'Có':'Không'}</td><td className="
@@ -553,7 +556,7 @@ function Shell() {
 													mt - 2 text - 3 xl font - bold ">{id?'Chỉnh sửa hồ sơ':'Thêm thành viên'}</h1></div><form onSubmit={submit} className="
 													grid gap - 4 rounded - 2 xl border bg - white p - 6 sm: grid - cols - 2 ">{error&&<p className="
 													sm: col - span - 2 rounded - lg bg - red - 50 p - 3 text - red - 700 ">{error}</p>}<Field label="
-													Họ và tên "><input required className={input} value={form.fullName} onChange={e=>change('fullName',e.target.value)}/></Field><Field label="
+													Họ và tên "><input required className={input} value={form.fullName} onChange={e=>change('fullName',e.target.value)}/></Field><Field label="Biệt danh"><input className={input} value={form.nickname} onChange={e=>change('nickname',e.target.value)} placeholder="Không bắt buộc"/></Field><Field label="
 													Giới tính "><select className={input} value={form.gender} onChange={e=>change('gender',e.target.value)}><option value="
 													male ">Nam</option><option value="
 													female ">Nữ</option></select></Field><Field label="

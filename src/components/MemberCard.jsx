@@ -21,7 +21,9 @@ export default function MemberCard({
 		}
 		alt = ""
 		className = "h-12 w-12 rounded-full object-cover" / > : m.fullName.split(' ').slice(-2).map(s => s[0]).join('')
-	} < /div><div className="font-semibold text-sm">{m.fullName}</div > < div className = "text-xs text-stone-500" > Đời thứ {
+	} < /div><div className="font-semibold text-sm">{m.fullName}</div >
+	{m.nickname && <div className="text-xs text-stone-500 break-words">Biệt danh: {m.nickname}</div>}
+	< div className = "text-xs text-stone-500" > Đời thứ {
 		m.generation
 	}· {
 		m.parentId ? 'Con cháu' : m.spouseId ? 'Dâu / rể' : 'Thủy tổ'

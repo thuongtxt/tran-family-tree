@@ -33,6 +33,7 @@ export default function MemberDrawer({
 			member.branch || 'Chưa phân chi'
 		} < /p></div > < div className = "mt-8 space-y-4 text-sm" > {
 			[
+				['Biệt danh', member.nickname || 'Chưa cập nhật'],
 				['Giới tính', member.gender === 'male' ? 'Nam' : 'Nữ'],
 				['Ngày sinh', member.birthDate || 'Chưa cập nhật'],
 				['Ngày mất / ngày giỗ', member.isAlive ? 'Còn sống' : member.deathDate || 'Chưa cập nhật'],
